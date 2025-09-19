@@ -17,7 +17,7 @@ export const users = pgTable('users', {
     inspectionCount: integer('inspection_count').default(0),
     monthlyInspectionCount: integer('monthly_inspection_count').default(0),
     lastResetDate: timestamp('last_reset_date').defaultNow(),
-    isActive: boolean('is_blocked').default(false), // keep your original column name if desired
+    isActive: boolean('is_active').default(false),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow()
 });
