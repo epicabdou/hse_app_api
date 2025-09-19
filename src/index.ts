@@ -9,8 +9,7 @@ app.get('/', (req, res) => {
     <html>
       <head>
         <meta charset="utf-8"/>
-        <title>Express on Vercel</title>
-        <link rel="stylesheet" href="/style.css" />
+        <title>>HSE Analysis App - API</title>
       </head>
       <body>
         <h1>HSE Analysis App 🚀</h1>
