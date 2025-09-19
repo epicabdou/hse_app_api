@@ -7,14 +7,14 @@ import { z } from 'zod';
 export const users = pgTable('users', {
     id: uuid('id').defaultRandom().primaryKey(),
     clerkUserId: varchar('clerk_user_id', { length: 255 }).unique().notNull(),
-    email: varchar('email', { length: 255 }),
+    email: varchar('email', { length: 255 }).notNull(),
     firstName: varchar('first_name', { length: 100 }),
     lastName: varchar('last_name', { length: 100 }),
-    imageUrl: varchar('image_url', { length: 500 }),
+    imageUrl: text('image_url'),
     inspectionCount: integer('inspection_count').default(0),
     monthlyInspectionCount: integer('monthly_inspection_count').default(0),
     lastResetDate: timestamp('last_reset_date').defaultNow(),
-    isActive: boolean('is_active').default(true),
+    isActive: boolean('is_blocked').default(false),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow()
 });
