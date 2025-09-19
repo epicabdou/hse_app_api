@@ -2,6 +2,7 @@ import 'dotenv/config'
 import express from 'express'
 import {clerkClient, clerkMiddleware, getAuth, requireAuth} from '@clerk/express'
 import {verifyWebhook} from "@clerk/express/webhooks";
+import {UserService} from "./services/userService.js";
 
 const app = express()
 app.use(clerkMiddleware())
@@ -34,23 +35,62 @@ app.get('/protected', requireAuth(), async (req, res) => {
     return res.json({ user })
 })
 
-app.post('/api/webhooks', express.raw({ type: 'application/json' }), async (req, res) => {
-    try {
-        const evt = await verifyWebhook(req)
+// Webhook endpoint with raw body parsing
+app.post('/api/webhooks',
+    express.raw({ type: 'application/json' }),
+    async (req, res) => {
+        try {
+            console.log('Webhook received, verifying...');
 
-        // Do something with payload
-        // For this guide, log payload to console
-        const { id } = evt.data
-        const eventType = evt.type
-        console.log(`Received webhook with ID ${id} and event type of ${eventType}`)
-        console.log('Webhook payload:', evt.data)
+            // Verify the webhook
+            const evt = await verifyWebhook(req);
+            const { type, data } = evt;
 
-        return res.send('Webhook received')
-    } catch (err) {
-        console.error('Error verifying webhook:', err)
-        return res.status(400).send('Error verifying webhook')
+            console.log(`Webhook verified: ID ${data.id}, Type: ${type}`);
+
+            // Handle different event types
+            switch (type) {
+                case 'user.created':
+                    console.log('Processing user.created event');
+                    await UserService.createUser(data);
+                    break;
+
+                case 'user.updated':
+                    console.log('Processing user.updated event');
+                    await UserService.updateUser(data.id, data);
+                    break;
+
+                case 'user.deleted':
+                    console.log('Processing user.deleted event');
+                    await UserService.deleteUser(data.id);
+                    break;
+
+                default:
+                    console.log(`Unhandled webhook event type: ${type}`);
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: 'Webhook processed successfully',
+                eventId: data.id,
+                eventType: type
+            });
+
+        } catch (error) {
+            console.error('Webhook processing error:', error);
+
+            // Return appropriate error response
+            if (error.message.includes('verification failed')) {
+                return res.status(401).json({ error: 'Webhook verification failed' });
+            }
+
+            return res.status(500).json({
+                error: 'Internal server error',
+                message: error.message
+            });
+        }
     }
-})
+);
 
 // Health check
 app.get('/healthz', (req, res) => {
