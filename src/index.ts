@@ -9,7 +9,7 @@ app.get('/', (req, res) => {
     <html>
       <head>
         <meta charset="utf-8"/>
-        <title>>HSE Analysis App - API</title>
+        <title>HSE Analysis App - API</title>
       </head>
       <body>
         <h1>HSE Analysis App 🚀</h1>
