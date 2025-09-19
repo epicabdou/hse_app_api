@@ -1,9 +1,4 @@
-import express from 'express'
-import path from 'path'
-import { fileURLToPath } from 'url'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+import express from 'express';
 
 const app = express()
 
@@ -18,28 +13,10 @@ app.get('/', (req, res) => {
         <link rel="stylesheet" href="/style.css" />
       </head>
       <body>
-        <nav>
-          <a href="/">Home</a>
-          <a href="/about">About</a>
-          <a href="/api-data">API Data</a>
-          <a href="/healthz">Health</a>
-        </nav>
-        <h1>Hello World 🚀</h1>
+        <h1>HSE Analysis App 🚀</h1>
       </body>
     </html>
   `)
-})
-
-app.get('/about', function (req, res) {
-  res.sendFile(path.join(__dirname, '..', 'components', 'about.htm'))
-})
-
-// Example API endpoint - JSON
-app.get('/api-data', (req, res) => {
-  res.json({
-    message: 'Here is some sample API data',
-    items: ['apple', 'banana', 'cherry'],
-  })
 })
 
 // Health check
