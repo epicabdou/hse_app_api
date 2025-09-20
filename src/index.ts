@@ -3,13 +3,9 @@ import express from 'express'
 import {clerkClient, clerkMiddleware, getAuth, requireAuth} from '@clerk/express'
 import {verifyWebhook} from "@clerk/express/webhooks";
 import {UserService} from "./services/userService.js";
-import helmet from 'helmet';
 
 const app = express()
 app.use(clerkMiddleware())
-
-// Security middleware
-app.use(helmet());
 
 // Home route - HTML
 app.get('/', (req, res) => {
