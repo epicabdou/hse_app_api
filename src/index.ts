@@ -3,9 +3,13 @@ import express from 'express'
 import {clerkClient, clerkMiddleware, getAuth, requireAuth} from '@clerk/express'
 import {verifyWebhook} from "@clerk/express/webhooks";
 import {UserService} from "./services/userService.js";
+import helmet from 'helmet';
 
 const app = express()
 app.use(clerkMiddleware())
+
+// Security middleware
+app.use(helmet());
 
 // Home route - HTML
 app.get('/', (req, res) => {
@@ -93,8 +97,29 @@ app.post('/api/webhooks',
 );
 
 // Health check
-app.get('/healthz', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() })
-})
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        version: process.env.npm_package_version || '1.0.0',
+    });
+});
+
+// Error handling middleware
+app.use((error, req, res, next) => {
+    console.error('Unhandled error:', error);
+    res.status(500).json({
+        error: 'Internal server error',
+        requestId: req.id,
+    });
+});
+
+// 404 handler
+app.use( (req, res) => {
+    res.status(404).json({
+        error: 'Route not found',
+        path: req.originalUrl,
+    });
+});
 
 export default app
