@@ -18,7 +18,6 @@ app.use(cors({
     methods: ["GET","POST","OPTIONS"],
 }));
 
-// Home route - HTML
 app.get('/', (req, res) => {
   res.type('html').send(`
     <!doctype html>
@@ -34,7 +33,7 @@ app.get('/', (req, res) => {
   `)
 });
 
-app.get('/api/superadmin-only', requireAuth(), async (req, res) => {
+app.get('/api/superadmin-only', async (req, res) => {
     const { userId } = getAuth(req)
 
     try {
@@ -57,8 +56,6 @@ app.get('/api/superadmin-only', requireAuth(), async (req, res) => {
     }
 });
 
-// Use requireAuth() to protect this route
-// If user isn't authenticated, requireAuth() will redirect back to the homepage
 app.get('/protected', requireAuth(), async (req, res) => {
     // Use `getAuth()` to get the user's `userId`
     const { userId } = getAuth(req)
@@ -69,7 +66,6 @@ app.get('/protected', requireAuth(), async (req, res) => {
     return res.json({ user })
 })
 
-// Webhook endpoint with raw body parsing
 app.post('/api/webhooks',
     express.raw({ type: 'application/json' }),
     async (req, res) => {
@@ -126,7 +122,6 @@ app.post('/api/webhooks',
     }
 );
 
-// Health check
 app.get('/health', (req, res) => {
     res.status(200).json({
         status: 'healthy',
@@ -135,7 +130,6 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Error handling middleware
 app.use((error, req, res, next) => {
     console.error('Unhandled error:', error);
     res.status(500).json({
@@ -143,8 +137,6 @@ app.use((error, req, res, next) => {
         requestId: req.id,
     });
 });
-
-// 404 handler
 /**
 app.use( (req, res) => {
     res.status(404).json({
