@@ -33,7 +33,7 @@ app.get('/', (req, res) => {
   `)
 });
 
-app.get('/api/superadmin-only', async (req, res) => {
+app.get('/api/superadmin-only', requireAuth(), async (req, res) => {
     const { userId } = getAuth(req)
 
     try {
