@@ -4,12 +4,14 @@ import express from 'express'
 import {clerkClient, clerkMiddleware, getAuth, requireAuth} from '@clerk/express'
 import {verifyWebhook} from "@clerk/express/webhooks";
 import {UserService} from "./services/userService.js";
+import cors from "cors";
 
 // const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 const app = express()
 
 app.use(express.json({ limit: "10mb" }));
 app.use(clerkMiddleware())
+app.use(cors());
 
 // Home route - HTML
 app.get('/', (req, res) => {
