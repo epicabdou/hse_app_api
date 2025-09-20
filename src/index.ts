@@ -1,10 +1,15 @@
 import 'dotenv/config'
 import express from 'express'
+import OpenAI from "openai";
 import {clerkClient, clerkMiddleware, getAuth, requireAuth} from '@clerk/express'
 import {verifyWebhook} from "@clerk/express/webhooks";
 import {UserService} from "./services/userService.js";
+import {requireSuperadmin} from "./middlewares/index.js";
 
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 const app = express()
+
+app.use(express.json({ limit: "10mb" }));
 app.use(clerkMiddleware())
 
 // Home route - HTML
@@ -21,7 +26,15 @@ app.get('/', (req, res) => {
       </body>
     </html>
   `)
-})
+});
+
+app.get('/api/superadmin-only', requireSuperadmin, (req, res) => {
+    res.json({
+        message: "Welcome superadmin!",
+        timestamp: new Date(),
+        userId: req.userId
+    });
+});
 
 // Use requireAuth() to protect this route
 // If user isn't authenticated, requireAuth() will redirect back to the homepage
