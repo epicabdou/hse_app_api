@@ -25,13 +25,13 @@ app.disable("x-powered-by"); // NEW
 // Order matters:
 app.use(compression());
 // app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
+app.use(clerkMiddleware());
 
 // 1) CORS FIRST so preflights never hit auth
 const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:8081",
-    "exp://192.168.8.5:8081",
-    "https://hseappapi.vercel.app",
+    "exp://192.168.8.5:8081"
 ];
 app.use(
     cors({
@@ -172,10 +172,9 @@ app.use(
     })
 );
 
-/**
 app.get("*", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.sendFile(path.join(distDir, "index.html"));
 });
-**/
+
 export default app;

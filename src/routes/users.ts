@@ -8,8 +8,11 @@ import { clerkClient, getAuth, requireAuth } from "@clerk/express";
 
 const router = express.Router();
 
-/** Optional: gate mutations to superadmins only */
-async function ensureSuperadmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+async function ensureSuperadmin(
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+) {
     try {
         const { userId } = getAuth(req);
         if (!userId) return res.status(401).json({ error: "Unauthorized" });
@@ -28,7 +31,7 @@ const UpdateUserSchema = z.object({
     firstName: z.string().max(100).optional(),
     lastName: z.string().max(100).optional(),
     monthlyInspectionCount: z.number().int().min(0).optional(),
-    lastResetDate: z.coerce.date().optional(), // accepts ISO string
+    lastResetDate: z.coerce.date().optional(),
 }).refine((data) => Object.keys(data).length > 0, { message: "No fields to update" });
 
 router.get("/", requireAuth(), ensureSuperadmin, async (_req, res) => {
@@ -41,7 +44,6 @@ router.get("/", requireAuth(), ensureSuperadmin, async (_req, res) => {
     }
 });
 
-/** PATCH /api/users/:id — partial update */
 router.patch("/:id", requireAuth(), ensureSuperadmin, async (req, res) => {
     const { id } = req.params;
 

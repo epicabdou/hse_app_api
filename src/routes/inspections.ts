@@ -19,7 +19,6 @@ import { uploadBufferToBlob } from "../lib/blob.js";
 const router = express.Router();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-/** Optional: gate mutations to superadmins only */
 async function ensureSuperadmin(
     req: express.Request,
     res: express.Response,
@@ -105,7 +104,7 @@ async function canRunAnotherInspection(appUserId: string) {
 
 /** Local payload schema: allow EITHER imageUrl OR base64 imageData */
 const analyzePayloadSchema = z.object({
-    imageUrl: z.string().url().optional(),
+    imageUrl: z.url().optional(),
     imageData: z.string().min(1, "imageData cannot be empty").optional(), // raw base64, no data: prefix
     imageType: z.string().optional().default("image/jpeg"),
 }).refine(v => !!v.imageUrl || !!v.imageData, {
