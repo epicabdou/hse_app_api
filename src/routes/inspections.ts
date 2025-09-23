@@ -1,7 +1,7 @@
 // src/routes/inspections.ts
 import express from "express";
 import { clerkClient, getAuth, requireAuth } from "@clerk/express";
-import OpenAI from "openai";
+import {OpenAI} from "openai";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import {
