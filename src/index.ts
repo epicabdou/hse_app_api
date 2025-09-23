@@ -27,12 +27,38 @@ app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 
 app.use(express.json({ limit: "10mb" }));
 app.use(clerkMiddleware())
-app.use(cors({
-    origin: ["http://localhost:5173", "http://localhost:8081"],
-    credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization"],
-    methods: ["GET","POST","OPTIONS"],
-}));
+
+// 1) CORS *first*, so it handles OPTIONS before auth middlewares
+const allowedOrigins = [
+    "http://localhost:5173",   // your Vite web app
+    "http://localhost:8081",   // Expo web dev server
+    "exp://192.168.8.5:8081"
+];
+
+app.use(
+    cors({
+        origin(origin, cb) {
+            if (!origin) return cb(null, true); // mobile apps / curl (no origin) → allow
+            const ok =
+                allowedOrigins.includes(origin) ||
+                /\.vercel\.app$/.test(origin); // allow other vercel previews if you want
+            cb(ok ? null : new Error(`CORS blocked for origin: ${origin}`), ok);
+        },
+        credentials: true,
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allowedHeaders: [
+            "Content-Type",
+            "Authorization",
+            "Origin",
+            "Accept",
+            "X-Requested-With",
+            "Clerk-Redirect-To",
+        ],
+        optionsSuccessStatus: 204,
+    })
+);
+
+app.options("*", cors());
 
 app.get('/api/superadmin-only', requireAuth(), async (req, res) => {
     const { userId } = getAuth(req)
