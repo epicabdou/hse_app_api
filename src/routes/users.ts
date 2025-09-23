@@ -31,7 +31,6 @@ const UpdateUserSchema = z.object({
     lastResetDate: z.coerce.date().optional(), // accepts ISO string
 }).refine((data) => Object.keys(data).length > 0, { message: "No fields to update" });
 
-/** GET /api/users — list */
 router.get("/", requireAuth(), ensureSuperadmin, async (_req, res) => {
     try {
         const rows = await db.select().from(usersTable);
