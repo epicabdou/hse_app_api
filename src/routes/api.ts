@@ -1,6 +1,5 @@
 // routes/api.js
 import express from "express";
-import { requireSuperadmin } from "../middlewares/index.js";
 
 const router = express.Router();
 
@@ -21,7 +20,7 @@ router.get("/inspections/:id", (req, res) => {
 });
 
 // /api/admin/stats → GET (superadmin only)
-router.get("/admin/stats", requireSuperadmin, (req, res) => {
+router.get("/admin/stats", (req, res) => {
     return res.status(200).json({ ok: true, metrics: {} });
 });
 

@@ -1,21 +1,17 @@
-import 'dotenv/config'
-import express from 'express'
-import {clerkClient, clerkMiddleware, getAuth, requireAuth} from '@clerk/express'
+import {clerkClient, clerkMiddleware, getAuth, requireAuth} from "@clerk/express";
 import {verifyWebhook} from "@clerk/express/webhooks";
 import {UserService} from "./services/userService.js";
-import cors from "cors";
-
-import path from "path";
-import { fileURLToPath } from "url";
-import compression from "compression";
-//import helmet from "helmet";
-import morgan from "morgan";
 import history from "connect-history-api-fallback";
 import serveStatic from "serve-static";
-import {db} from "./db/index.js";
+import compression from "compression";
+import { fileURLToPath } from "url";
+import express from 'express'
+import morgan from "morgan";
+import cors from "cors";
+import path from "path";
+import 'dotenv/config'
 
-import { users as usersTable } from "./db/schema.js";
-
+import usersRouter from "./routes/users.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -129,24 +125,7 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-app.get('/api/users', async (req, res) => {
-    const { userId } = getAuth(req)
-
-    try {
-        const user = await clerkClient.users.getUser(userId)
-        const role = user?.publicMetadata?.appRole
-
-        if (role !== "superadmin") {
-            return res.status(403).json({ error: "Forbidden: superadmin access required" });
-        }
-
-        const rows = await db.select().from(usersTable);
-        res.status(200).json(rows);
-    } catch(error) {
-        console.error('Error fetching users:', error);
-        return res.status(500).json({ error: "Internal server error" });
-    }
-});
+app.use("/api/users", usersRouter);
 
 // --- SPA static serving
 const distDir = path.resolve(__dirname, "dist");
