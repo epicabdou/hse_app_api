@@ -28,7 +28,7 @@ app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 app.use(express.json({ limit: "10mb" }));
 app.use(clerkMiddleware())
 app.use(cors({
-    origin: ["http://localhost:5173"],
+    origin: ["http://localhost:5173", "http://localhost:8081"],
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
     methods: ["GET","POST","OPTIONS"],
