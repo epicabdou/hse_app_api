@@ -33,6 +33,7 @@ const allowedOrigins = [
     "http://localhost:8081",
     "exp://192.168.8.5:8081"
 ];
+
 app.use(
     cors({
         origin(origin, cb) {
