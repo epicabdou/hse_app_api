@@ -12,6 +12,10 @@ import compression from "compression";
 import morgan from "morgan";
 import history from "connect-history-api-fallback";
 import serveStatic from "serve-static";
+import {db} from "./db/index.js";
+
+import { users as usersTable } from "./db/schema.js";
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,7 +25,6 @@ const app = express()
 //app.use(helmet());
 app.use(compression());
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
-app.use(express.json());
 
 app.use(express.json({ limit: "10mb" }));
 app.use(clerkMiddleware())
@@ -124,6 +127,25 @@ app.get('/api/health', (req, res) => {
         timestamp: new Date().toISOString(),
         version: process.env.npm_package_version || '1.0.0',
     });
+});
+
+app.get('/api/users', async (req, res) => {
+    const { userId } = getAuth(req)
+
+    try {
+        const user = await clerkClient.users.getUser(userId)
+        const role = user?.publicMetadata?.appRole
+
+        if (role !== "superadmin") {
+            return res.status(403).json({ error: "Forbidden: superadmin access required" });
+        }
+
+        const rows = await db.select().from(usersTable);
+        res.status(200).json(rows);
+    } catch(error) {
+        console.error('Error fetching users:', error);
+        return res.status(500).json({ error: "Internal server error" });
+    }
 });
 
 // --- SPA static serving
