@@ -8,7 +8,7 @@ import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 import compression from "compression";
-import helmet from "helmet";
+//import helmet from "helmet";
 import morgan from "morgan";
 import history from "connect-history-api-fallback";
 import serveStatic from "serve-static";
@@ -18,7 +18,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express()
 
-app.use(helmet());
+//app.use(helmet());
 app.use(compression());
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 app.use(express.json());
