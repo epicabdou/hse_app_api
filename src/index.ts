@@ -32,7 +32,8 @@ app.use(clerkMiddleware())
 const allowedOrigins = [
     "http://localhost:5173",   // your Vite web app
     "http://localhost:8081",   // Expo web dev server
-    "exp://192.168.8.5:8081"
+    "exp://192.168.8.5:8081",
+    "https://hseappapi.vercel.app"
 ];
 
 app.use(
