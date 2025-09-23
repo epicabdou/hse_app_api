@@ -7,7 +7,6 @@ import serveStatic from "serve-static";
 import compression from "compression";
 import { fileURLToPath } from "url";
 import express from "express";
-// import morgan from "morgan";
 import cors from "cors";
 import path from "path";
 import "dotenv/config";
@@ -24,7 +23,6 @@ app.disable("x-powered-by"); // NEW
 
 // Order matters:
 app.use(compression());
-// app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 app.use(clerkMiddleware());
 
 // 1) CORS FIRST so preflights never hit auth
