@@ -18,9 +18,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express()
 
-app.use(helmet({
-    contentSecurityPolicy: false, // keep simple; customize if you have inline scripts
-}));
+app.use(helmet());
 app.use(compression());
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 app.use(express.json());
