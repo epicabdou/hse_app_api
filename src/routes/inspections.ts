@@ -12,7 +12,7 @@ import {
     analysisResultSchema,
     type AnalysisResult,
 } from "../db/schema.js";
-import { eq, desc, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { HSE_ANALYSIS_PROMPT } from "../lib/prompt.js";
 
 const router = express.Router();
@@ -318,6 +318,81 @@ router.get("/admin/stats", requireAuth(), ensureSuperadmin, async (_req, res) =>
             totalInspections: (total as any)[0]?.count ?? 0,
             topUsers: byUser,
         },
+    });
+});
+
+router.get("/admin/all", requireAuth(), ensureSuperadmin, async (req, res) => {
+    const page = Math.max(1, Number(req.query.page ?? "1"));
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize ?? "20")));
+    const offset = (page - 1) * pageSize;
+
+    const userId = typeof req.query.userId === "string" ? req.query.userId : undefined;
+    const grade = typeof req.query.grade === "string" ? req.query.grade : undefined; // A|B|C|D|F
+    const status = typeof req.query.status === "string" ? req.query.status : undefined; // pending|processing|completed|failed
+    const from = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
+    const to = typeof req.query.to === "string" ? new Date(req.query.to) : undefined;
+    const sortByRaw =
+        typeof req.query.sortBy === "string" ? req.query.sortBy : "createdAt";
+    const orderRaw =
+        typeof req.query.order === "string" ? req.query.order : "desc";
+
+    // Build WHERE
+    const clauses = [];
+    if (userId) clauses.push(eq(inspections.userId, userId as any));
+    if (grade) clauses.push(eq(inspections.safetyGrade, grade as any));
+    if (status) clauses.push(eq(inspections.processingStatus, status as any));
+    if (from) clauses.push(gte(inspections.createdAt, from));
+    if (to) clauses.push(lte(inspections.createdAt, to));
+    const where = clauses.length ? and(...clauses) : undefined;
+
+    // Sorting
+    const sortByCol =
+        sortByRaw === "riskScore"
+            ? inspections.riskScore
+            : sortByRaw === "hazardCount"
+                ? inspections.hazardCount
+                : inspections.createdAt;
+
+    const orderBy = orderRaw.toLowerCase() === "asc" ? asc(sortByCol) : desc(sortByCol);
+
+    // Data query (join with users to include email/name)
+    const rows = await db
+        .select({
+            id: inspections.id,
+            createdAt: inspections.createdAt,
+            updatedAt: inspections.updatedAt,
+            userId: inspections.userId,
+            imageUrl: inspections.imageUrl,
+            hazardCount: inspections.hazardCount,
+            riskScore: inspections.riskScore,
+            safetyGrade: inspections.safetyGrade,
+            processingStatus: inspections.processingStatus,
+            // user info
+            userEmail: users.email,
+            userFirstName: users.firstName,
+            userLastName: users.lastName,
+        })
+        .from(inspections)
+        .leftJoin(users, eq(users.id, inspections.userId))
+        .where(where)
+        .orderBy(orderBy)
+        .limit(pageSize)
+        .offset(offset);
+
+    // Total count for pagination
+    const totalRes = await db
+        .select({ count: sql<number>`COUNT(*)::int` })
+        .from(inspections)
+        .where(where);
+
+    const total = totalRes[0]?.count ?? 0;
+
+    return res.status(200).json({
+        ok: true,
+        page,
+        pageSize,
+        total,
+        inspections: rows,
     });
 });
 

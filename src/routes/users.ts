@@ -31,7 +31,7 @@ const UpdateUserSchema = z.object({
     lastResetDate: z.coerce.date().optional(), // accepts ISO string
 }).refine((data) => Object.keys(data).length > 0, { message: "No fields to update" });
 
-router.get("/", requireAuth(), ensureSuperadmin, async (_req, res) => {
+router.get("/admin/", requireAuth(), ensureSuperadmin, async (_req, res) => {
     try {
         const rows = await db.select().from(usersTable);
         res.status(200).json(rows);
@@ -42,7 +42,7 @@ router.get("/", requireAuth(), ensureSuperadmin, async (_req, res) => {
 });
 
 /** PATCH /api/users/:id — partial update */
-router.patch("/:id", requireAuth(), ensureSuperadmin, async (req, res) => {
+router.patch("/admin/:id", requireAuth(), ensureSuperadmin, async (req, res) => {
     const { id } = req.params;
 
     const parsed = UpdateUserSchema.safeParse(req.body);
