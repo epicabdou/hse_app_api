@@ -8,12 +8,13 @@ import {
     users,
     inspections,
     usageLogs,
-    createInspectionSchema,
     analysisResultSchema,
     type AnalysisResult,
 } from "../db/schema.js";
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { HSE_ANALYSIS_PROMPT } from "../lib/prompt.js";
+import { base64ToBuffer, compressToWebP } from "../lib/image.js";
+import { uploadBufferToBlob } from "../lib/blob.js";
 
 const router = express.Router();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -102,21 +103,29 @@ async function canRunAnotherInspection(appUserId: string) {
     return monthly < MONTHLY_INSPECTION_LIMIT;
 }
 
+/** Local payload schema: allow EITHER imageUrl OR base64 imageData */
+const analyzePayloadSchema = z.object({
+    imageUrl: z.string().url().optional(),
+    imageData: z.string().min(1, "imageData cannot be empty").optional(), // raw base64, no data: prefix
+    imageType: z.string().optional().default("image/jpeg"),
+}).refine(v => !!v.imageUrl || !!v.imageData, {
+    message: "Provide imageUrl or imageData",
+});
+
 /** /api/inspections/analyze → POST
- * Body: { imageData: base64 string (NO data: prefix), imageType?: string }
- * Uses Chat Completions (vision). No zod-to-json-schema—strict JSON via instructions, then Zod-validate.
+ * Body: { imageUrl } OR { imageData, imageType }
  */
 router.post("/analyze", requireAuth(), async (req, res) => {
     const t0 = Date.now();
     const { userId: clerkUserId } = getAuth(req);
     if (!clerkUserId) return res.status(401).json({ error: "Unauthorized" });
 
-    // Validate payload
-    const parsedBody = createInspectionSchema.safeParse(req.body);
-    if (!parsedBody.success) {
-        return res.status(400).json({ error: "Invalid payload", details: parsedBody.error.flatten() });
+    // Validate payload (we accept both URL and base64)
+    const parsed = analyzePayloadSchema.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
     }
-    const { imageData, imageType = "image/jpeg" } = parsedBody.data;
+    const { imageUrl, imageData, imageType = "image/jpeg" } = parsed.data;
 
     try {
         const appUser = await getOrCreateAppUserByClerkId(clerkUserId);
@@ -130,19 +139,41 @@ router.post("/analyze", requireAuth(), async (req, res) => {
             });
         }
 
-        // Strict JSON instructions
+        // If client sent base64, compress → webp and upload to Blob; otherwise use provided URL
+        let finalImageUrl = imageUrl as string | undefined;
+
+        if (!finalImageUrl && imageData) {
+            // Approximate size check to avoid over-large requests if someone bypassed client compression
+            const approxBytes = Math.floor(imageData.length * 0.75);
+            if (approxBytes > 8_000_000) { // 8MB guardrail
+                return res.status(413).json({ error: "Image too large. Please upload a smaller photo." });
+            }
+
+            const rawBuf = base64ToBuffer(imageData);
+            const webp = await compressToWebP(rawBuf, { maxSide: 1600, quality: 72 });
+
+            const key = `inspections/${appUser.id}/${Date.now()}.webp`;
+            const put = await uploadBufferToBlob(key, webp.buffer, "image/webp", { access: "public" });
+            finalImageUrl = put.url;
+        }
+
+        if (!finalImageUrl) {
+            return res.status(400).json({ error: "No usable image provided" });
+        }
+
+        // Build strict system message
         const systemMsg =
             HSE_ANALYSIS_PROMPT +
             `
-STRICT OUTPUT RULES:
-- Return ONLY the JSON object described above.
-- Do NOT include backticks, markdown, code fences, or any commentary.
-- Ensure all enum and numeric fields meet the exact constraints.
-`;
+                STRICT OUTPUT RULES:
+                - Return ONLY the JSON object described above.
+                - Do NOT include backticks, markdown, code fences, or any commentary.
+                - Ensure all enum and numeric fields meet the exact constraints.
+            `;
 
         const startOpenAI = Date.now();
 
-        // Vision request (Chat Completions)
+        // Vision request (Chat Completions using image URL)
         const completion = await openai.chat.completions.create({
             model: process.env.OPENAI_MODEL ?? "gpt-4o",
             temperature: 0,
@@ -152,27 +183,21 @@ STRICT OUTPUT RULES:
                     role: "user",
                     content: [
                         { type: "text", text: "Analyze this workplace image." },
-                        {
-                            type: "image_url",
-                            image_url: { url: `data:${imageType};base64,${imageData}` },
-                        },
+                        { type: "image_url", image_url: { url: finalImageUrl } },
                     ],
                 },
             ],
         });
 
-        // Get assistant text (string in most SDKs; include safe array fallback)
+        // Extract assistant text
         const choice = completion.choices?.[0];
         const msg = choice?.message;
-
         let outputText = "";
         if (typeof msg?.content === "string") {
             outputText = msg.content;
         } else if ((msg as any)?.content && Array.isArray((msg as any).content)) {
             const parts = (msg as any).content as Array<{ type?: string; text?: string }>;
-            outputText = parts.map((p) => (p?.type === "text" ? p.text ?? "" : "")).join("").trim();
-        } else {
-            outputText = "";
+            outputText = parts.map(p => (p?.type === "text" ? p.text ?? "" : "")).join("").trim();
         }
 
         // Validate JSON with Zod
@@ -187,40 +212,33 @@ STRICT OUTPUT RULES:
             });
         }
 
-        // Persist inspection (for dev: store data URL; in prod upload to S3/GCS and store URL)
+        // Persist inspection (store URLs, not giant data URIs)
         const now = new Date();
-        const dataUrl = `data:${imageType};base64,${imageData}`;
-
-        const [inserted] = await db
-            .insert(inspections)
-            .values({
-                userId: appUser.id,
-                imageUrl: dataUrl,
-                originalImageUrl: dataUrl,
-                hazardCount: analysis.hazards.length,
-                riskScore: analysis.overallAssessment.riskScore,
-                safetyGrade: analysis.overallAssessment.safetyGrade,
-                analysisResults: analysis as any,
-                processingStatus: "completed",
-                createdAt: now,
-                updatedAt: now,
-            })
-            .returning();
+        const [inserted] = await db.insert(inspections).values({
+            userId: appUser.id,
+            imageUrl: finalImageUrl,        // public Blob URL for your UI
+            originalImageUrl: finalImageUrl, // keep same for now; set to raw upload if you keep originals
+            hazardCount: analysis.hazards.length,
+            riskScore: analysis.overallAssessment.riskScore,
+            safetyGrade: analysis.overallAssessment.safetyGrade,
+            analysisResults: analysis as any,
+            processingStatus: "completed",
+            createdAt: now,
+            updatedAt: now,
+        }).returning();
 
         await incrementUserInspectionCounters(appUser.id);
 
-        // tokensUsed without TS2881
-        const u = completion.usage; // type CompletionUsage | undefined
-
-        const tokensUsed: number | null =
-            u?.total_tokens !== undefined
+        // tokensUsed — safe number | null
+        let tokensUsed: number | null = null;
+        const u = completion.usage;
+        if (u) {
+            tokensUsed = u.total_tokens !== undefined
                 ? u.total_tokens
-                : u
-                    ? (u.completion_tokens ?? 0) + (u.prompt_tokens ?? 0)
-                    : null;
+                : (u.completion_tokens ?? 0) + (u.prompt_tokens ?? 0);
+        }
 
         const respMs = Date.now() - t0;
-
         await db.insert(usageLogs).values({
             userId: appUser.id,
             endpoint: "/api/inspections/analyze",

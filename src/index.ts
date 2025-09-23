@@ -14,6 +14,7 @@ import 'dotenv/config'
 
 import usersRouter from "./routes/users.js";
 import inspectionsRouter from "./routes/inspections.js";
+import uploadsRouter from "./routes/uploads.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -129,6 +130,7 @@ app.get('/api/health', (req, res) => {
 
 app.use("/api/users", usersRouter);
 app.use('/api/inspections', inspectionsRouter);
+app.use("/api/uploads", uploadsRouter);
 
 // --- SPA static serving
 const distDir = path.resolve(__dirname, "dist");
