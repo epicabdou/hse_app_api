@@ -1,3 +1,4 @@
+// src/index.ts
 import {clerkClient, clerkMiddleware, getAuth, requireAuth} from "@clerk/express";
 import {verifyWebhook} from "@clerk/express/webhooks";
 import {UserService} from "./services/userService.js";
@@ -12,6 +13,7 @@ import path from "path";
 import 'dotenv/config'
 
 import usersRouter from "./routes/users.js";
+import inspectionsRouter from "./routes/inspections.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -126,6 +128,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use("/api/users", usersRouter);
+app.use('/api/inspections', inspectionsRouter);
 
 // --- SPA static serving
 const distDir = path.resolve(__dirname, "dist");
