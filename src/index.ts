@@ -4,9 +4,26 @@ import {clerkClient, clerkMiddleware, getAuth, requireAuth} from '@clerk/express
 import {verifyWebhook} from "@clerk/express/webhooks";
 import {UserService} from "./services/userService.js";
 import cors from "cors";
-import {requireRole} from "./middlewares/index.js";
+
+import path from "path";
+import { fileURLToPath } from "url";
+import compression from "compression";
+import helmet from "helmet";
+import morgan from "morgan";
+import history from "connect-history-api-fallback";
+import serveStatic from "serve-static";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express()
+
+app.use(helmet({
+    contentSecurityPolicy: false, // keep simple; customize if you have inline scripts
+}));
+app.use(compression());
+app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
+app.use(express.json());
 
 app.use(express.json({ limit: "10mb" }));
 app.use(clerkMiddleware())
@@ -17,36 +34,30 @@ app.use(cors({
     methods: ["GET","POST","OPTIONS"],
 }));
 
-app.get('/', (req, res) => {
-  res.type('html').send(`
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8"/>
-        <title>HSE Analysis App - API</title>
-      </head>
-      <body>
-        <h1>HSE Analysis App 🚀</h1>
-      </body>
-    </html>
-  `)
-});
+app.get('/api/superadmin-only', requireAuth(), async (req, res) => {
+    const { userId } = getAuth(req)
 
-app.get(
-    "/api/superadmin-only",
-    requireAuth(),
-    requireRole("superadmin"),
-    (req, res) => {
+    try {
+        const user = await clerkClient.users.getUser(userId)
+        const role = user?.publicMetadata?.appRole
+
+        if (role !== "superadmin") {
+            return res.status(403).json({ error: "Forbidden: superadmin access required" });
+        }
+
         res.json({
             message: "Welcome superadmin!",
             timestamp: new Date().toISOString(),
-            userId: req.user.id, // available thanks to the middleware
+            userId: userId
         });
+
+    } catch (error) {
+        console.error('Error fetching user:', error);
+        return res.status(500).json({ error: "Internal server error" });
     }
-);
+});
 
-
-app.get('/protected', requireAuth(), async (req, res) => {
+app.get('/api/protected', requireAuth(), async (req, res) => {
     // Use `getAuth()` to get the user's `userId`
     const { userId } = getAuth(req)
 
@@ -56,9 +67,7 @@ app.get('/protected', requireAuth(), async (req, res) => {
     return res.json({ user })
 })
 
-app.post('/api/webhooks',
-    express.raw({ type: 'application/json' }),
-    async (req, res) => {
+app.post('/api/webhooks', express.raw({ type: 'application/json' }), async (req, res) => {
         try {
             console.log('Webhook received, verifying...');
 
@@ -109,10 +118,9 @@ app.post('/api/webhooks',
                 message: error.message
             });
         }
-    }
-);
+    });
 
-app.get('/health', (req, res) => {
+app.get('/api/health', (req, res) => {
     res.status(200).json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
@@ -120,19 +128,37 @@ app.get('/health', (req, res) => {
     });
 });
 
-app.use((error, req, res, next) => {
-    console.error('Unhandled error:', error);
-    res.status(500).json({
-        error: 'Internal server error',
-        requestId: req.id,
-    });
+// --- SPA static serving
+const distDir = path.resolve(__dirname, "dist");
+
+// 1) Let the history middleware reroute unknown non-API requests to /index.html
+app.use(history({
+    // only rewrite non-API calls
+    rewrites: [
+        { from: /^\/api\/.*$/, to: context => context.parsedUrl.path } // keep API paths intact
+    ],
+}));
+
+// 2) Serve static assets with long caching
+app.use(
+    serveStatic(distDir, {
+        index: false, // we’ll send index manually so we can set headers
+        setHeaders: (res, filePath) => {
+            if (/\.(?:js|css|mjs|png|jpg|jpeg|gif|svg|webp|ico|woff2?)$/i.test(filePath)) {
+                // cache immutable build assets for 1 year
+                res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+            } else {
+                // default short cache
+                res.setHeader("Cache-Control", "public, max-age=3600");
+            }
+        },
+    })
+);
+
+// 3) Catch-all to send index.html for SPA entry (no-cache to ensure fresh HTML)
+app.get("*", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.sendFile(path.join(distDir, "index.html"));
 });
-/**
-app.use( (req, res) => {
-    res.status(404).json({
-        error: 'Route not found',
-        path: req.originalUrl,
-    });
-});
-**/
+
 export default app
