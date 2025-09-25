@@ -19,7 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-app.disable("x-powered-by"); // NEW
+app.disable("x-powered-by");
 
 app.use(compression());
 app.use(clerkMiddleware());
