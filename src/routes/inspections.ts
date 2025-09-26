@@ -413,4 +413,252 @@ router.get("/admin/all", requireAuth(), ensureSuperadmin, async (req, res) => {
     });
 });
 
+/** /api/inspections/usage-logs/list → GET (user's own logs) */
+router.get("/usage-logs/list", requireAuth(), async (req, res) => {
+    const { userId: clerkUserId } = getAuth(req);
+    if (!clerkUserId) return res.status(401).json({ error: "Unauthorized" });
+
+    const page = Math.max(1, Number(req.query.page ?? "1"));
+    const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize ?? "20")));
+    const offset = (page - 1) * pageSize;
+
+    try {
+        const appUser = await getOrCreateAppUserByClerkId(clerkUserId);
+
+        // Build filters
+        const clauses = [eq(usageLogs.userId, appUser.id)];
+
+        // Optional filters
+        const endpoint = typeof req.query.endpoint === "string" ? req.query.endpoint : undefined;
+        const success = req.query.success === "true" ? true : req.query.success === "false" ? false : undefined;
+        const from = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
+        const to = typeof req.query.to === "string" ? new Date(req.query.to) : undefined;
+
+        if (endpoint) clauses.push(eq(usageLogs.endpoint, endpoint));
+        if (success !== undefined) clauses.push(eq(usageLogs.success, success));
+        if (from) clauses.push(gte(usageLogs.createdAt, from));
+        if (to) clauses.push(lte(usageLogs.createdAt, to));
+
+        const where = and(...clauses);
+
+        const rows = await db
+            .select()
+            .from(usageLogs)
+            .where(where)
+            .orderBy(desc(usageLogs.createdAt))
+            .limit(pageSize)
+            .offset(offset);
+
+        // Get total count for pagination
+        const totalRes = await db
+            .select({ count: sql<number>`COUNT(*)::int` })
+            .from(usageLogs)
+            .where(where);
+
+        const total = totalRes[0]?.count ?? 0;
+
+        return res.status(200).json({
+            ok: true,
+            usageLogs: rows,
+            page,
+            pageSize,
+            total
+        });
+    } catch (err: any) {
+        console.error("Usage logs list error:", err);
+        return res.status(500).json({ error: "Internal server error", message: err?.message });
+    }
+});
+
+/** /api/inspections/usage-logs/:id → GET (single usage log) */
+router.get("/usage-logs/:id", requireAuth(), async (req, res) => {
+    const { userId: clerkUserId } = getAuth(req);
+    if (!clerkUserId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+
+    try {
+        const appUser = await getOrCreateAppUserByClerkId(clerkUserId);
+
+        const rows = await db
+            .select()
+            .from(usageLogs)
+            .where(eq(usageLogs.id, id as any))
+            .limit(1);
+
+        const row = rows[0];
+        if (!row) return res.status(404).json({ ok: false, error: "Usage log not found" });
+
+        // Ensure user can only access their own logs
+        if (row.userId !== appUser.id) {
+            return res.status(403).json({ ok: false, error: "Forbidden" });
+        }
+
+        return res.status(200).json({ ok: true, usageLog: row });
+    } catch (err: any) {
+        console.error("Usage log get error:", err);
+        return res.status(500).json({ error: "Internal server error", message: err?.message });
+    }
+});
+
+/** /api/inspections/admin/usage-logs → GET (superadmin - all usage logs with user info) */
+router.get("/admin/usage-logs", requireAuth(), ensureSuperadmin, async (req, res) => {
+    const page = Math.max(1, Number(req.query.page ?? "1"));
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize ?? "20")));
+    const offset = (page - 1) * pageSize;
+
+    try {
+        // Filters
+        const userId = typeof req.query.userId === "string" ? req.query.userId : undefined;
+        const endpoint = typeof req.query.endpoint === "string" ? req.query.endpoint : undefined;
+        const success = req.query.success === "true" ? true : req.query.success === "false" ? false : undefined;
+        const errorType = typeof req.query.errorType === "string" ? req.query.errorType : undefined;
+        const from = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
+        const to = typeof req.query.to === "string" ? new Date(req.query.to) : undefined;
+
+        // Sorting
+        const sortByRaw = typeof req.query.sortBy === "string" ? req.query.sortBy : "createdAt";
+        const orderRaw = typeof req.query.order === "string" ? req.query.order : "desc";
+
+        // Build WHERE clause
+        const clauses = [];
+        if (userId) clauses.push(eq(usageLogs.userId, userId as any));
+        if (endpoint) clauses.push(eq(usageLogs.endpoint, endpoint));
+        if (success !== undefined) clauses.push(eq(usageLogs.success, success));
+        if (errorType) clauses.push(eq(usageLogs.errorType, errorType));
+        if (from) clauses.push(gte(usageLogs.createdAt, from));
+        if (to) clauses.push(lte(usageLogs.createdAt, to));
+        const where = clauses.length ? and(...clauses) : undefined;
+
+        // Sorting
+        const sortByCol =
+            sortByRaw === "tokensUsed" ? usageLogs.tokensUsed :
+                sortByRaw === "responseTime" ? usageLogs.responseTime :
+                    sortByRaw === "apiCost" ? usageLogs.apiCost :
+                        usageLogs.createdAt;
+
+        const orderBy = orderRaw.toLowerCase() === "asc" ? asc(sortByCol) : desc(sortByCol);
+
+        // Query with user join
+        const rows = await db
+            .select({
+                id: usageLogs.id,
+                userId: usageLogs.userId,
+                endpoint: usageLogs.endpoint,
+                tokensUsed: usageLogs.tokensUsed,
+                apiCost: usageLogs.apiCost,
+                responseTime: usageLogs.responseTime,
+                success: usageLogs.success,
+                errorType: usageLogs.errorType,
+                createdAt: usageLogs.createdAt,
+                // User info
+                userEmail: users.email,
+                userFirstName: users.firstName,
+                userLastName: users.lastName,
+            })
+            .from(usageLogs)
+            .leftJoin(users, eq(users.id, usageLogs.userId))
+            .where(where)
+            .orderBy(orderBy)
+            .limit(pageSize)
+            .offset(offset);
+
+        // Total count
+        const totalRes = await db
+            .select({ count: sql<number>`COUNT(*)::int` })
+            .from(usageLogs)
+            .where(where);
+
+        const total = totalRes[0]?.count ?? 0;
+
+        return res.status(200).json({
+            ok: true,
+            page,
+            pageSize,
+            total,
+            usageLogs: rows,
+        });
+    } catch (err: any) {
+        console.error("Admin usage logs error:", err);
+        return res.status(500).json({ error: "Internal server error", message: err?.message });
+    }
+});
+
+/** /api/inspections/admin/usage-stats → GET (superadmin - usage statistics) */
+router.get("/admin/usage-stats", requireAuth(), ensureSuperadmin, async (req, res) => {
+    try {
+        // Total usage logs
+        const totalRes = await db
+            .select({ count: sql<number>`COUNT(*)::int` })
+            .from(usageLogs);
+
+        // Success rate
+        const successRes = await db
+            .select({
+                total: sql<number>`COUNT(*)::int`,
+                successful: sql<number>`COUNT(*) FILTER (WHERE success = true)::int`
+            })
+            .from(usageLogs);
+
+        // Usage by endpoint
+        const byEndpoint = await db.execute(sql`
+            SELECT 
+                endpoint,
+                COUNT(*)::int AS count,
+                AVG(response_time)::int AS avg_response_time,
+                SUM(tokens_used)::int AS total_tokens,
+                COUNT(*) FILTER (WHERE success = true)::int AS successful_requests
+            FROM usage_logs
+            GROUP BY endpoint
+            ORDER BY count DESC;
+        `);
+
+        // Usage by user (top 10)
+        const byUser = await db.execute(sql`
+            SELECT 
+                ul.user_id AS "userId",
+                u.email AS "userEmail",
+                COUNT(*)::int AS count,
+                SUM(ul.tokens_used)::int AS total_tokens,
+                AVG(ul.response_time)::int AS avg_response_time
+            FROM usage_logs ul
+            LEFT JOIN users u ON u.id = ul.user_id
+            GROUP BY ul.user_id, u.email
+            ORDER BY count DESC
+            LIMIT 10;
+        `);
+
+        // Recent activity (last 7 days)
+        const recentActivity = await db.execute(sql`
+            SELECT 
+                DATE(created_at) AS date,
+                COUNT(*)::int AS requests,
+                COUNT(*) FILTER (WHERE success = true)::int AS successful_requests,
+                SUM(tokens_used)::int AS tokens_used
+            FROM usage_logs
+            WHERE created_at >= NOW() - INTERVAL '7 days'
+            GROUP BY DATE(created_at)
+            ORDER BY date DESC;
+        `);
+
+        const total = totalRes[0]?.count ?? 0;
+        const successData = successRes[0];
+        const successRate = successData?.total ? (successData.successful / successData.total) * 100 : 0;
+
+        return res.status(200).json({
+            ok: true,
+            stats: {
+                totalRequests: total,
+                successRate: Math.round(successRate * 100) / 100,
+                byEndpoint,
+                byUser,
+                recentActivity,
+            },
+        });
+    } catch (err: any) {
+        console.error("Usage stats error:", err);
+        return res.status(500).json({ error: "Internal server error", message: err?.message });
+    }
+});
+
 export default router;
