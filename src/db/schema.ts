@@ -63,9 +63,9 @@ const SafetyGradeEnum = z.enum(['A','B','C','D','F']);
 const ProcessingStatusEnum = z.enum(['pending','processing','completed','failed']);
 
 export const insertUserSchema = createInsertSchema(users, {
-    id: z.string().uuid().optional(),
+    id: z.uuid().optional(),
     clerkUserId: z.string().min(1),
-    email: z.string().email(),
+    email: z.email(),
     firstName: z.string().max(100).optional(),
     lastName: z.string().max(100).optional(),
     inspectionCount: z.number().int().nonnegative().optional(),
@@ -77,16 +77,16 @@ export const insertUserSchema = createInsertSchema(users, {
 });
 
 export const selectUserSchema = createSelectSchema(users, {
-    id: z.string().uuid(),
-    email: z.string().email(),
+    id: z.uuid(),
+    email: z.email(),
     lastResetDate: z.coerce.date(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date()
 });
 
 export const insertInspectionSchema = createInsertSchema(inspections, {
-    id: z.string().uuid().optional(),
-    userId: z.string().uuid(),
+    id: z.uuid().optional(),
+    userId: z.uuid(),
     imageUrl: z.string().min(1),
     originalImageUrl: z.string().min(1).optional(),
     hazardCount: z.number().int().min(0).optional(),
@@ -107,8 +107,8 @@ export const selectInspectionSchema = createSelectSchema(inspections, {
 });
 
 export const insertUsageLogSchema = createInsertSchema(usageLogs, {
-    id: z.string().uuid().optional(),
-    userId: z.string().uuid().optional(),
+    id: z.uuid().optional(),
+    userId: z.uuid().optional(),
     endpoint: z.string().min(1),
     tokensUsed: z.number().int().min(0).optional(),
     // Accept number at input, but DB stores DECIMAL -> string on read
@@ -125,7 +125,7 @@ export const selectUsageLogSchema = createSelectSchema(usageLogs, {
 });
 
 export const insertSettingsSchema = createInsertSchema(settings, {
-    id: z.string().uuid().optional(),
+    id: z.uuid().optional(),
     key: z.string().min(1),
     value: z.string().min(1),
     description: z.string().min(1).optional(),
